@@ -1,7 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useReducer } from "react";
 import { Button } from "./components/Button";
 import { Input } from "./components/Input";
 import styles from "./App.module.css";
+import {
+  TOGGLE_FIELD,
+  UPDATE_TASK_LIST,
+  ADD_VALUE,
+  SEARCH_VALUE,
+  SET_FIELD_TRUE,
+  SET_FIELD_FALSE,
+} from "./components/constants.js";
 
 // const taskListURL = "https://jsonplaceholder.typicode.com/todos";
 
@@ -9,21 +17,56 @@ import styles from "./App.module.css";
 // http://localhost:3000
 const taskListURL = "http://localhost:3000/tasks";
 
-function App() {
-  const [taskList, setTaskList] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
-  const [addValue, setAddValue] = useState("");
-  const [isUpdating, setIsUpdating] = useState("");
-  const [searchValue, setSearchValue] = useState("");
-  const [isSorted, setIsSorted] = useState(false);
-  const [isRefreshedTasks, setIsRefreshedTasks] = useState();
+const initialState = {
+  taskList: [],
+  isLoading: false,
+  isAdding: false,
+  isRemoving: false,
+  addValue: "",
+  isUpdating: false,
+  searchValue: "",
+  isSorted: false,
+  isRefreshedTasks: false,
+};
+
+function reducer(state, action) {
+  const { type, payload } = action;
+  switch (type) {
+    case UPDATE_TASK_LIST:
+      return { ...state, taskList: payload };
+    case SET_FIELD_TRUE:
+      return { ...state, [payload.field]: true };
+    case SET_FIELD_FALSE:
+      return { ...state, [payload.field]: false };
+    case TOGGLE_FIELD:
+      return { ...state, [payload.field]: !state[payload.field] };
+    case ADD_VALUE:
+      return { ...state, addValue: payload };
+    case SEARCH_VALUE:
+      return { ...state, searchValue: payload };
+    default: {
+      throw new Error("Unknown action");
+    }
+  }
+}
+
+export default function App() {
+  const [appState, dispatcher] = useReducer(reducer, initialState);
+  // const [taskList, setTaskList] = useState([]);
+  // const [isLoading, setIsLoading] = useState(false);
+  // const [isAdding, setIsAdding] = useState(false);
+  // const [isRemoving, setIsRemoving] = useState(false);
+  // const [addValue, setAddValue] = useState("");
+  // const [isUpdating, setIsUpdating] = useState(false);
+  // const [searchValue, setSearchValue] = useState("");
+  // const [isSorted, setIsSorted] = useState(false);
+  // const [isRefreshedTasks, setIsRefreshedTasks] = useState();
+
   let taskListBase = useRef();
 
   // utils
   function refreshTasks() {
-    setIsRefreshedTasks(!isRefreshedTasks);
+    dispatcher({ type: TOGGLE_FIELD, payload: { field: "isRefreshedTasks" } });
   }
 
   function getId(event) {
@@ -45,39 +88,45 @@ function App() {
   // on INPUT change
   const onInputChange = (event) => {
     const newValue = event.target.value;
-    setAddValue(newValue);
+    dispatcher({ type: ADD_VALUE, payload: newValue });
   };
 
   // add task
   const addTask = () => {
-    if (addValue.length == 0) {
+    if (appState.addValue.length == 0) {
       alert("Add valid task");
       return false;
     }
-    setIsAdding(true);
+    dispatcher({ type: SET_FIELD_TRUE, payload: { field: "isAdding" } });
+    // setIsAdding(true);
     fetch(taskListURL, {
       method: "POST",
       headers: { "Content-Type": "application/json;charset=utf-8" },
       body: JSON.stringify({
-        title: addValue,
+        title: appState.addValue,
         completed: false,
       }),
     })
       .then((rawResponse) => rawResponse.json())
       .then((resData) =>
-        console.log(`Added ${addValue} on server with response: ${resData}`)
+        console.log(
+          `Added ${appState.addValue} on server with response: ${resData}`
+        )
       )
       .catch((error) => console.log(error))
       .finally(() => {
-        setIsAdding(false);
+        dispatcher({ type: SET_FIELD_FALSE, payload: { field: "isAdding" } });
+        // setIsAdding(false);
         refreshTasks();
-        setAddValue("");
+        dispatcher({ type: ADD_VALUE, payload: "" });
+        // setAddValue("");
       });
   };
 
   // update task
   const updateTask = (event) => {
-    setIsUpdating(true);
+    dispatcher({ type: SET_FIELD_TRUE, payload: { field: "isUpdating" } });
+    // setIsUpdating(true);
 
     const userValue = getNewInput(event);
     const id = getId(event);
@@ -103,7 +152,8 @@ function App() {
       )
       .catch((error) => console.log(error))
       .finally(() => {
-        setIsUpdating(false);
+        dispatcher({ type: SET_FIELD_FALSE, payload: { field: "isUpdating" } });
+        // setIsUpdating(false);
         refreshTasks();
       });
   };
@@ -118,13 +168,17 @@ function App() {
   }
 
   const sortTasks = () => {
-    if (isSorted) {
-      setTaskList(taskListBase.current);
-      setIsSorted(false);
+    if (appState.isSorted) {
+      dispatcher({ type: UPDATE_TASK_LIST, payload: taskListBase.current });
+      // setTaskList(taskListBase.current);
+      dispatcher({ type: SET_FIELD_FALSE, payload: { field: "isSorted" } });
+      // setIsSorted(false);s
     } else {
-      const sorted = sortingTasks(taskList);
-      setTaskList(sorted);
-      setIsSorted(true);
+      const sorted = sortingTasks(appState.taskList);
+      dispatcher({ type: UPDATE_TASK_LIST, payload: sorted });
+      // setTaskList(sorted);
+      dispatcher({ type: SET_FIELD_TRUE, payload: { field: "isSorted" } });
+      // setIsSorted(true);
     }
   };
 
@@ -133,7 +187,7 @@ function App() {
     value = value.trim().toLowerCase();
     console.log("value", value);
 
-    const filteredTaskList = taskList.filter((task) => {
+    const filteredTaskList = appState.taskList.filter((task) => {
       let title = task.title.trim().toLowerCase();
       return title.includes(value);
     });
@@ -145,15 +199,18 @@ function App() {
       refreshTasks();
     }
     const newValue = event.target.value;
-    setSearchValue(newValue);
-    console.log("newValue", newValue);
+    dispatcher({ type: SEARCH_VALUE, payload: newValue });
+    // setSearchValue(newValue);
+    // console.log("newValue", newValue);
     const filteredTaskList = searchTask(newValue);
-    setTaskList(filteredTaskList);
+    dispatcher({ type: UPDATE_TASK_LIST, payload: filteredTaskList });
+    // setTaskList(filteredTaskList);
   };
 
   // REMOVE
   const removeTask = (event) => {
-    setIsRemoving(true);
+    dispatcher({ type: SET_FIELD_TRUE, payload: { field: "isRemoving" } });
+    // setIsRemoving(true);
     const id = getId(event);
     const taskListURLToDelete = taskListURL + "/" + id;
 
@@ -166,30 +223,34 @@ function App() {
       )
       .catch((error) => console.log(error))
       .finally(() => {
-        setIsRemoving(false);
+        dispatcher({ type: SET_FIELD_FALSE, payload: { field: "isRemoving" } });
+        // setIsRemoving(false);
         refreshTasks();
       });
   };
   //
   // fetch data
   useEffect(() => {
-    setIsLoading(true);
+    dispatcher({ type: SET_FIELD_TRUE, payload: { field: "isLoading" } });
+    // setIsLoading(true);
 
     fetch(taskListURL)
       .then((res) => {
         return res.json();
       })
       .then((resData) => {
-        setTaskList(resData);
+        dispatcher({ type: UPDATE_TASK_LIST, payload: resData });
+        // setTaskList(resData);
         taskListBase.current = resData;
       })
       .catch((error) => {
         console.log(error);
       })
       .finally(() => {
-        setIsLoading(false);
+        dispatcher({ type: SET_FIELD_FALSE, payload: { field: "isLoading" } });
+        // setIsLoading(false);
       });
-  }, [isRefreshedTasks]);
+  }, [appState.isRefreshedTasks]);
 
   // return
   return (
@@ -197,18 +258,18 @@ function App() {
       <div className={styles.container}>
         <h1>Tasks</h1>
 
-        {isLoading && <div className={styles.loader}></div>}
+        {appState.isLoading && <div className={styles.loader}></div>}
 
-        {!isLoading && (
+        {!appState.isLoading && (
           <>
             <div className={styles.inputField}>
               <Input
                 name="add"
                 placeholder="Add task"
                 onChange={onInputChange}
-                value={addValue}
+                value={appState.addValue}
               />
-              <Button onClick={addTask} disabled={isAdding}>
+              <Button onClick={addTask} disabled={appState.isAdding}>
                 Add
               </Button>
             </div>
@@ -217,23 +278,23 @@ function App() {
                 name="search"
                 placeholder="Search task"
                 onChange={onInputSearchChange}
-                value={searchValue}
+                value={appState.searchValue}
               />
             </div>
             <div className={styles.sortingBtnContainer}>
-              {!isSorted && (
+              {!appState.isSorted && (
                 <Button className={styles.sortingBtn} onClick={sortTasks}>
                   Sort ABC
                 </Button>
               )}
-              {isSorted && (
+              {appState.isSorted && (
                 <Button className={styles.sortingBtn} onClick={sortTasks}>
                   Sort Base
                 </Button>
               )}
             </div>
             <ul className={styles.taskList}>
-              {taskList.map(({ id, title, completed }) => {
+              {appState.taskList.map(({ id, title, completed }) => {
                 return (
                   <div className={styles.taskContainer} key={id} data-id={id}>
                     <li
@@ -259,5 +320,3 @@ function App() {
     </>
   );
 }
-
-export default App;
